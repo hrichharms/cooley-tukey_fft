@@ -12,16 +12,16 @@ using std::cout;
 const complex<double> i(0.0, 1.0);
 
 
-complex<double>* fft(const complex<double>* y, int N, int s) {
+complex<double>* fft(const complex<double>* v, int N, int s) {
     if (N == 1) {
-        return new complex<double>(y[0]);
+        return new complex<double>(v[0]);
     }
     complex<double>* X = new complex<double>[N];
-    complex<double>* ft_1 = fft(y, N/2, 2*s);
-    complex<double>* ft_2 = fft(y+s, N/2, 2*s);
+    complex<double>* ft_1 = fft(v, N/2, 2*s);
+    complex<double>* ft_2 = fft(v+s, N/2, 2*s);
     complex<double> p, q;
-    ft_1 = fft(y, N / 2, 2 * s);
-    ft_2 = fft(y + s, N / 2, 2 * s);
+    ft_1 = fft(v, N / 2, 2 * s);
+    ft_2 = fft(v + s, N / 2, 2 * s);
     for (int k=0; k<N/2; k++) {
         p = ft_1[k];
         q = exp(-2 * M_PI * i / (double) N * (double) k) * ft_2[k];
@@ -34,40 +34,26 @@ complex<double>* fft(const complex<double>* y, int N, int s) {
 }
 
 
-complex<double>* even_extension(const double* x, int N) {
-    complex<double>* y = new complex<double>[2 * N];
+complex<double>* reorder_sequence(const double* x, int N) {
+    complex<double>* v = new complex<double>[N];
     for (int k=0; k<N; k++) {
-        y[k] = x[k];
-        y[2 * N - k - 1] = x[k];
+        if (k < N/2) {
+            v[k] = x[2 * k];
+        } else {
+            v[k] = x[2 * N - 2 * k - 1];
+        }
     }
-    return y;
+    return v;
 }
 
 
 double* fct(const double* x, int N) {
-    complex<double>* y = even_extension(x, N);
-    complex<double>* V = fft(y, N, 1);
+    complex<double>* V = fft(reorder_sequence(x, N), N, 1);
     double* C = new double[N];
-    for (int k=0; k<N; k++) {
-        C[k] = real(V[k]);
+    for (int k=0; k<N/2; k++) {
+        V[k] *= 2.0 * exp(-i * M_PI * double(k) / (2.0 * N));
+        C[k] = V[k].real();
+        C[N - k] = -V[k].imag();
     }
     return C;
-}
-
-
-int main() {
-
-    int N = 8;
-    double* x = new double[N];
-    for (int k=0; k<N; k++) {
-        x[k] = k;
-    }
-
-    double* C = fct(x, N);
-    for (int k=0; k<N; k++) {
-        cout << '|' << C[k];
-    }
-    cout << '|\n';
-
-    return 0;
 }
