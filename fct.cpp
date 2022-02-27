@@ -1,6 +1,5 @@
 #include <iostream>
 #include <complex>
-#include <bits/stdc++.h>
 #include <cmath>
 #include <math.h>
 
@@ -18,7 +17,7 @@ const inum i(0.0, 1.0);
 
 
 inum* calculate_fourier_twiddles(int N) {
-    inum* fourier_twiddles;
+    inum* fourier_twiddles = new inum[N];
     for (int k=0; k<N; k++) {
         fourier_twiddles[k] = exp(-2.0 * pi * i * double(k) / double(N));
     }
