@@ -1,166 +1,187 @@
-#include <iostream>
+/*
+Radix-2 Out-of-Place DIT FFT Algorithm for 1D Real Input
+
+TODO:
+    - implement IDFT
+    - replace complex number operations with macros
+    - add SIMD build support
+*/
+
 #include <complex>
-#include <cmath>
 #include <math.h>
+#include <iostream>
 
-using std::complex;
-using std::exp;
-using std::real;
+using std::conj;
 using std::cos;
-using std::cout;
+using std::sin;
 
 
-typedef complex<double> inum;
-
-const double pi = M_PI;
-const inum i(0.0, 1.0);
+typedef double real;
+typedef std::complex<real> complex;
 
 
-inum* calculate_fourier_twiddles(int N) {
-    inum* fourier_twiddles = new inum[N];
+const complex i = complex(0.0, 1.0);
+const double pi=3.141592653589793238462643383279502884197169399375105820974944;
+
+
+/*
+Calculates twiddle factors (complex roots of unity) for an N/2-point DFT
+and the associated post-processing for a real-valued 1D input
+*/
+complex* calculate_fft_twiddles(int N) {
+    complex* twiddles = new complex[N];
+    double phase;
     for (int k=0; k<N; k++) {
-        fourier_twiddles[k] = exp(-2.0 * pi * i * double(k) / double(N));
+        phase = -2.0 * pi * k / N;
+        twiddles[k] = complex(cos(phase), sin(phase));
     }
-    return fourier_twiddles;
+    return twiddles;
 }
 
 
-inum* fft(const inum* x, int N, int s, const inum* fourier_twiddles) {
-    if (N == 1) {
-        return new inum(x[0]);
-    }
-    inum* X = new inum[N];
-    int new_N = N/2;
-    inum* E = fft(x, new_N, 2*s, fourier_twiddles);
-    inum* O = fft(&x[s], new_N, 2*s, fourier_twiddles);
-    for (int k=0; k<new_N; k++) {
-        X[k] = E[k] + fourier_twiddles[k] * O[k];
-        X[k + new_N] = E[k] - fourier_twiddles[k] * O[k];
-    }
-    delete[] E;
-    delete[] O;
-    return X;
+/*
+Combine the outputs of two DFTs
+*/
+void r2_butterfly(
+    complex* twiddles,
+    complex* output,
+    int stride,
+    int m
+) {
+    complex* output2 = output + m;
+    complex t;
+    do {
+        t = *output2 * *twiddles;
+        *output2 = *output - t;
+        *output += t;
+
+        twiddles += 2 * stride;
+        output++;
+        output2++;
+    } while (--m);
 }
 
 
-inum* calculate_cosine_twiddles(int N) {
-    inum* cosine_twiddles;
-    for (int k=0; k<N; k++) {
-        cosine_twiddles[k] = 2.0 * exp(-i * pi * double(k) / (2.0 * N));
+/*
+Radix-2 Cooley-Tukey FFT
+*/
+void fft_recursive(
+    complex* twiddles,
+    const complex* input,
+    int n,
+    complex* output,
+    int stride
+) {
+    int m = n/2;
+
+    if (m == 1) {
+        output[0] = input[0];
+        output[1] = input[stride];
+    } else {
+        fft_recursive(twiddles, input, m, output, 2*stride);
+        fft_recursive(twiddles, input+stride, m, output+m, 2*stride);
     }
-    return cosine_twiddles;
+
+    r2_butterfly(twiddles, output, stride, m);
 }
 
 
-// double* fct(const double* x, int N, const inum* fourier_twiddles, const inum* cosine_twiddles) {
+/*
+Collapses real input of size N into complex sequence of size N/2,
+calculates the N/2-point DFT, then extracts the N-point DFT of the
+original N-point real input sequence
+*/
+void fft(
+    complex* twiddles,
+    const real* input,
+    int N,
+    complex* output
+) {
 
-// }
+    // collapse real input into N/2-point complex sequence
+    complex* input_complex = new complex[N];
+    for (int k=0; k<N/2; k++) {
+        input_complex[k] = complex(input[2 * k], input[2 * k + 1]);
+    }
+
+    // perform N/2-point FFT on complex sequence
+    fft_recursive(twiddles, input_complex, N/2, output, 1);
+
+    // derive N-point DFT of input data from N/2-point DFT
+    output[N/2] = output[0].real() - output[0].imag();
+    output[0] = output[0].real() + output[0].imag();
+    output[3*N/4] = output[N/4];
+    output[N/4] = conj(output[N/4]);
+    complex T, Tc, c3, c4, c5;
+    for (int k=1; k<N/4; k++) {
+        T = output[k];
+        Tc = conj(output[N/2 - k]);
+
+        c3 = T + Tc;
+        c4 = T - Tc;
+        c5 = i * twiddles[k] * c4;
+
+        output[k] = 0.5 * (c3 - c5);
+        output[N/2 - k] = conj(0.5 * (c3 + c5));
+        output[N - k] = conj(output[k]);
+        output[N/2 + k] = conj(output[N/2 - k]);
+
+    }
+
+}
 
 
-int main() {
-    int N = 16;
-    inum* input_data = new inum[N];
-    inum* output_data = new inum[N];
+/*
+Calculates twiddle factors (complex roots of unity) for an N-point DCT
+*/
+complex* calculate_fct_twiddles(int N) {
+    complex* twiddles = new complex[N];
+    double phase;
+    for (int k=0; k<N/2; k++) {
+        phase = -pi * k / (2.0 * N);
+        twiddles[k] = 2.0 * complex(cos(phase), sin(phase));
+    }
+    return twiddles;
+}
 
-    // I got the tests from here:
-    // https://www.stackoverflow.com/questions/25298119/unit-testing-a-discrete-fourier-transformation
-    // specifically referencing:
-    //      https://www.dsprelated.com/showthread/comp.dsp/71595-1.php
 
-    // calculate twiddle factors for fourier transform
-    inum* fourier_twiddles = calculate_fourier_twiddles(N);
+void fct(
+    complex* twiddles,
+    real* input,
+    int N,
+    real* output,
+    complex* fft_twiddles,
+    complex* fft_buffer
+) {
 
-    // TEST 1
-    cout << "TEST 1:\n\tInput Data:\t";
-    for (int k=0; k<N; k++) {
-        input_data[k] = 0.0;
-        cout << '|' << input_data[k];
-    }
-    cout << "|\n\tOutput Data:\t";
-    output_data = fft(input_data, N, 1, fourier_twiddles);
-    for (int k=0; k<N; k++) {
-        cout << '|' << output_data[k];
-    }
-    cout << "|\n\n";
+    // re-order input sequence
+    int a_i = 0;
+    int b_i = 1;
+    real a = input[0];
+    real b = input[1];
+    real tmp;
+    for (int j=0; j<N/2-1; j++) {
+        a_i = (a_i % 2 * N + a_i) / 2;
+        b_i = (b_i % 2 * N + b_i) / 2;
 
-    // TEST 2
-    cout << "TEST 2:\n\tInput Data:\t";
-    for (int k=0; k<N; k++) {
-        input_data[k] = 1.0;
-        cout << '|' << input_data[k];
-    }
-    cout << "|\n\tOutput Data:\t";
-    output_data = fft(input_data, N, 1, fourier_twiddles);
-    for (int k=0; k<N; k++) {
-        cout << '|' << output_data[k];
-    }
-    cout << "|\n\n";
+        tmp = input[a_i];
+        input[a_i] = a;
+        a = tmp[a_i];
 
-    // TEST 3
-    cout << "TEST 3:\n\tInput Data:\t";
-    for (int k=0; k<N; k++) {
-        input_data[k] = 1.0 - k % 2 * 2;
-        cout << '|' << input_data[k];
+        tmp = input[b_i];
+        input[b_i] = b;
+        b = tmp[b_i];
     }
-    cout << "|\n\tOutput Data:\t";
-    output_data = fft(input_data, N, 1, fourier_twiddles);
-    for (int k=0; k<N; k++) {
-        cout << '|' << output_data[k];
-    }
-    cout << "|\n\n";
 
-    // TEST 4
-    cout << "TEST 4:\n\tInput Data:\t";
-    for (int k=0; k<N; k++) {
-        input_data[k] = exp(16 * pi * i * double(k) / double(N));
-        cout << '|' << input_data[k];
-    }
-    cout << "|\n\tOutput Data:\t";
-    output_data = fft(input_data, N, 1, fourier_twiddles);
-    for (int k=0; k<N; k++) {
-        cout << '|' << output_data[k];
-    }
-    cout << "|\n\n";
+    // compute FFT of re-ordered input
+    fft(fft_twiddles, input, N, fft_buffer);
 
-    // TEST 5
-    cout << "TEST 5:\n\tInput Data:\t";
-    for (int k=0; k<N; k++) {
-        input_data[k] = cos(16 * pi * k / N);
-        cout << '|' << input_data[k];
+    // multiply DFT output sequence by DCT twiddle factors and extract
+    // real-valued DCT output sequence
+    for (int k=0; k<N/2; k++) {
+        fft_buffer[k] *= twiddles[k];
+        output[k] = fft_buffer[k].real();
+        output[N - k] = fft_buffer[k].imag();
     }
-    cout << "|\n\tOutput Data:\t";
-    output_data = fft(input_data, N, 1, fourier_twiddles);
-    for (int k=0; k<N; k++) {
-        cout << '|' << output_data[k];
-    }
-    cout << "|\n\n";
 
-    // TEST 6
-    cout << "TEST 6:\n\tInput Data:\t";
-    for (int k=0; k<N; k++) {
-        input_data[k] = exp((double(43) / 7) * i * 2.0 * pi * double(k) / double(N));
-        cout << '|' << input_data[k];
-    }
-    cout << "|\n\tOutput Data:\t";
-    output_data = fft(input_data, N, 1, fourier_twiddles);
-    for (int k=0; k<N; k++) {
-        cout << '|' << output_data[k];
-    }
-    cout << "|\n\n";
-
-    // TEST 7
-    cout << "TEST 7:\n\tInput Data:\t";
-    for (int k=0; k<N; k++) {
-        input_data[k] = cos((double(43) / 7) * 2 * pi * k / N);
-        cout << '|' << input_data[k];
-    }
-    cout << "|\n\tOutput Data:\t";
-    output_data = fft(input_data, N, 1, fourier_twiddles);
-    for (int k=0; k<N; k++) {
-        cout << '|' << output_data[k];
-    }
-    cout << "|\n\n";
-
-    // return successful exit code
-    return 0;
 }
