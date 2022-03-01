@@ -11,8 +11,6 @@ TODO:
 #include <math.h>
 #include <iostream>
 
-using std::endl;
-using std::cout;
 using std::conj;
 using std::cos;
 using std::sin;
