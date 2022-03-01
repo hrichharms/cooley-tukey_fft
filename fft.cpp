@@ -11,6 +11,9 @@ TODO:
 #include <math.h>
 #include <iostream>
 
+using std::endl;
+using std::cout;
+using std::conj;
 using std::cos;
 using std::sin;
 
@@ -19,6 +22,7 @@ typedef double real;
 typedef std::complex<real> complex;
 
 
+const complex i = complex(0.0, 1.0);
 const double pi=3.141592653589793238462643383279502884197169399375105820974944;
 
 
@@ -27,10 +31,10 @@ Calculates twiddle factors (complex roots of unity) for an N/2-point DFT
 and the associated post-processing for a real-valued 1D input
 */
 complex* calculate_fft_twiddles(int N) {
-    complex* twiddles = new complex[N/2];
+    complex* twiddles = new complex[N];
     double phase;
     for (int k=0; k<N; k++) {
-        phase = -2 * pi * k / N;
+        phase = -2.0 * pi * k / N;
         twiddles[k] = complex(cos(phase), sin(phase));
     }
     return twiddles;
@@ -53,7 +57,7 @@ void r2_butterfly(
         *output2 = *output - t;
         *output += t;
 
-        twiddles += stride * 2;
+        twiddles += 2 * stride;
         output++;
         output2++;
     } while (--m);
@@ -106,40 +110,24 @@ void fft(
     fft_recursive(twiddles, input_complex, N/2, output, 1);
 
     // derive N-point DFT of input data from N/2-point DFT
+    output[N/2] = output[0].real() - output[0].imag();
+    output[0] = output[0].real() + output[0].imag();
+    output[3*N/4] = output[N/4];
+    output[N/4] = conj(output[N/4]);
     complex T, Tc, c3, c4, c5;
-    for (int k=0; k<N/4; k++) {
+    for (int k=1; k<N/4; k++) {
         T = output[k];
-        Tc = complex(output[N/2 - k].real(), -output[N/2 - k].imag());
+        Tc = conj(output[N/2 - k]);
 
         c3 = T + Tc;
         c4 = T - Tc;
-        c5 = c4 * twiddles[k];
+        c5 = i * twiddles[k] * c4;
 
-        output[k] = complex(0.5 * (c3.real() + c5.real()), 0.5 * (c3.imag() + c5.imag()));
-        output[N/2 - k] = complex(0.5 * (c3.real() - c5.real()), 0.5 * (c5.imag() - c3.imag()));
+        output[k] = 0.5 * (c3 - c5);
+        output[N/2 - k] = conj(0.5 * (c3 + c5));
+        output[N - k] = conj(output[k]);
+        output[N/2 + k] = conj(output[N/2 - k]);
 
     }
-    for (int k=0; k<N; k++) {
-        std::cout << '|' << output[k];
-    }
-    std::cout << "|\n";
-}
 
-
-int main() {
-
-    int N = 4;
-    real* input = new real[N];
-    complex* output = new complex[N];
-
-    complex* twiddles = calculate_fft_twiddles(N);
-
-    input[0] = 0;
-    input[1] = 1;
-    input[2] = 1;
-    input[3] = 0;
-
-    fft(twiddles, input, N, output);
-
-    return 0;
 }
