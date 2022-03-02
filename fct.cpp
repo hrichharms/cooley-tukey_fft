@@ -11,6 +11,8 @@ TODO:
 #include <math.h>
 #include <iostream>
 
+using std::cout;
+using std::endl;
 using std::conj;
 using std::cos;
 using std::sin;
@@ -145,6 +147,9 @@ complex* calculate_fct_twiddles(int N) {
 }
 
 
+/*
+
+*/
 void fct(
     complex* twiddles,
     real* input,
@@ -154,34 +159,73 @@ void fct(
     complex* fft_buffer
 ) {
 
-    // re-order input sequence
-    int a_i = 0;
-    int b_i = 1;
-    real a = input[0];
-    real b = input[1];
-    real tmp;
-    for (int j=0; j<N/2-1; j++) {
-        a_i = (a_i % 2 * N + a_i) / 2;
-        b_i = (b_i % 2 * N + b_i) / 2;
-
-        tmp = input[a_i];
-        input[a_i] = a;
-        a = tmp[a_i];
-
-        tmp = input[b_i];
-        input[b_i] = b;
-        b = tmp[b_i];
+    // re-order input sequence (VERY UGLY RIGHT NOW)
+    for (int k=0; k<N; k++) { // copy input sequence to fft_buffer
+        fft_buffer[k] = input[k];
     }
+    for (int k=0; k<N; k++) { // calculate re-ordered sequence
+        input[k % 2 * N / 2 + k / 2] = fft_buffer[k].real();
+    }
+    for (int k=0; k<N; k++) {
+        cout << '|' << input[k];
+    }
+    cout << "|\n";
 
     // compute FFT of re-ordered input
     fft(fft_twiddles, input, N, fft_buffer);
+    for (int k=0; k<N; k++) {
+        cout << '|' << fft_buffer[k];
+    }
+    cout << "|\n";
 
     // multiply DFT output sequence by DCT twiddle factors and extract
     // real-valued DCT output sequence
     for (int k=0; k<N/2; k++) {
         fft_buffer[k] *= twiddles[k];
         output[k] = fft_buffer[k].real();
-        output[N - k] = fft_buffer[k].imag();
+        output[N - k] = -fft_buffer[k].imag();
     }
 
+}
+
+
+int main() {
+
+    int N = 16;
+    real* input = new real[N];
+    real* output = new real[N];
+    complex* fft_buffer = new complex[N];
+
+    complex* fft_twiddles = calculate_fft_twiddles(N);
+    complex* fct_twiddles = calculate_fct_twiddles(N);
+
+    input[0] = 0;
+    input[1] = 1;
+    input[2] = 1;
+    input[3] = 0;
+    input[4] = 1;
+    input[5] = 1;
+    input[6] = 1;
+    input[7] = 0;
+    input[8] = 0;
+    input[9] = 1;
+    input[10] = 0;
+    input[11] = 1;
+    input[12] = 1;
+    input[13] = 0;
+    input[14] = 0;
+    input[15] = 0;
+    // for (int k=0; k<N; k++) {
+    //     input[k] = k;
+    // }
+
+    fct(fct_twiddles, input, N, output, fft_twiddles, fft_buffer);
+
+    cout << endl;
+    for (int k=0; k<N; k++) {
+        cout << '|' << output[k];
+    }
+    cout << endl;
+
+    return 0;
 }
