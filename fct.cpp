@@ -128,8 +128,8 @@ void fft(
         output[k] = 0.5 * (c3 - c5);
         output[N/2 - k] = conj(0.5 * (c3 + c5));
         if (inverse) {
-            output[k] /= N;
-            output[N/2 - k] /= N;
+            output[k] *= 1.0 / N;
+            output[N/2 - k] *= 1.0 / N;
         }
         output[N - k] = conj(output[k]);
         output[N/2 + k] = conj(output[N/2 - k]);
