@@ -30,11 +30,12 @@ const double pi=3.141592653589793238462643383279502884197169399375105820974944;
 Calculates twiddle factors (complex roots of unity) for an N/2-point DFT
 and the associated post-processing for a real-valued 1D input
 */
-complex* calculate_fft_twiddles(int N) {
+complex* calculate_fft_twiddles(int N, bool inverse=0) {
     complex* twiddles = new complex[N];
     double phase;
     for (int k=0; k<N; k++) {
         phase = -2.0 * pi * k / N;
+        if (inverse) {phase *= -1;}
         twiddles[k] = complex(cos(phase), sin(phase));
     }
     return twiddles;
@@ -97,7 +98,8 @@ void fft(
     complex* twiddles,
     const real* input,
     int N,
-    complex* output
+    complex* output,
+    bool inverse = 0
 ) {
 
     // collapse real input into N/2-point complex sequence
@@ -125,6 +127,10 @@ void fft(
 
         output[k] = 0.5 * (c3 - c5);
         output[N/2 - k] = conj(0.5 * (c3 + c5));
+        if (inverse) {
+            output[k] /= N;
+            output[N/2 - k] /= N;
+        }
         output[N - k] = conj(output[k]);
         output[N/2 + k] = conj(output[N/2 - k]);
 
@@ -139,9 +145,9 @@ Calculates twiddle factors (complex roots of unity) for an N-point DCT
 complex* calculate_fct_twiddles(int N) {
     complex* twiddles = new complex[N];
     double phase;
-    for (int k=0; k<N/2; k++) {
+    for (int k=0; k<N; k++) {
         phase = -pi * k / (2.0 * N);
-        twiddles[k] = 2.0 * complex(cos(phase), sin(phase));
+        twiddles[k] = complex(cos(phase), sin(phase));
     }
     return twiddles;
 }
@@ -151,7 +157,7 @@ complex* calculate_fct_twiddles(int N) {
 
 */
 void fct(
-    complex* twiddles,
+    const complex* twiddles,
     real* input,
     int N,
     real* output,
@@ -172,7 +178,7 @@ void fct(
     cout << "|\n";
 
     // compute FFT of re-ordered input
-    fft(fft_twiddles, input, N, fft_buffer);
+    fft(fft_twiddles, input, N, fft_buffer, 1);
     for (int k=0; k<N; k++) {
         cout << '|' << fft_buffer[k];
     }
@@ -181,9 +187,7 @@ void fct(
     // multiply DFT output sequence by DCT twiddle factors and extract
     // real-valued DCT output sequence
     for (int k=0; k<N/2; k++) {
-        fft_buffer[k] *= twiddles[k];
-        output[k] = fft_buffer[k].real();
-        output[N - k] = -fft_buffer[k].imag();
+        output[k] = (twiddles[k] * fft_buffer[k]).real();
     }
 
 }
@@ -219,9 +223,12 @@ int main() {
     //     input[k] = k;
     // }
 
+    for (int k=0; k<N; k++) {
+        cout << '|' << input[k];
+    }
+    cout << "|\n";
     fct(fct_twiddles, input, N, output, fft_twiddles, fft_buffer);
 
-    cout << endl;
     for (int k=0; k<N; k++) {
         cout << '|' << output[k];
     }
