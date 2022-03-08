@@ -9,7 +9,6 @@ TODO:
 
 #include <complex>
 #include <math.h>
-#include <iostream>
 
 using std::conj;
 using std::cos;
